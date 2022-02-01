@@ -85,7 +85,7 @@ int TestListWithClasses( void )
 
 These lists are in fact the precursor to the STL.  They have been around for many years and have been thouroughly tested.
 Each node in the list consists of three pointers, 2 "Node" pointers and a void pointer.
-Here is figure 1 "ClinkeList synopsis":
+Here is figure 1 "ClinkedList synopsis":
 ![CLinkedList_Figure_01](https://user-images.githubusercontent.com/67572802/151897842-3522a1a4-08eb-4eee-a549-d0df3a7871b7.JPG)
 
 
