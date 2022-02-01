@@ -1,1 +1,1406 @@
 
+// LinkedList.cpp: implementation of the CLinkedList class.
+//
+//////////////////////////////////////////////////////////////////////
+/******************************************************************************
+*
+*   FILE SPECIFICATION : LinkedList.cpp
+*       TARGET MACHINE : PC
+*          ENVIRONMENT : Windows/NT
+*               SYSTEM : N/A
+*              PROJECT : N/A
+*
+*   COPYRIGHT
+*       Copyright (c) Ian Duff 1990 - 2022
+*       ALL RIGHTS RESERVED
+*
+************* F U N C T I O N A L    D E S C R I P T I O N *******************
+*
+*      Purpose:This module contains functions and class member functions
+*              for linked list routines applicable to the CLinkedList class.
+*
+*
+************* SOFTWARE TERMS AND CONDITIONS **********************************
+*
+*	NOTICE:  All information contained herein is, and remains
+*	the intellectual property of Ian Duff.
+*	Permission to use, copy, modify, distribute and sell this software
+*	and its documentation for any purpose is hereby granted without fee,
+*	provided that this header file appears in all copies and
+*	that both that copyright notice and this permission notice appear
+*	in supporting documentation.  Ian Duff makes no
+*	representations about the suitability of this software for any
+*	purpose.  It is provided "as is" without express or implied warranty.
+*
+************* M O D I F I C A T I O N   H I S T O R Y ************************
+*----------------+---------------+--------------------------------------------
+*     Date       | Author        | Reason for change
+*----------------+---------------+--------------------------------------------
+* 20-March-1999  | I.  Duff      | 2.0W     | Final Realease Windows Version.
+* 20-Nov  -2017  | I.  Duff      | 2.1W     | Text replacements for "old" 
+*                                             Microsoft data types, eg LPVOID
+*                                             UINT, etc and TRACE macros
+* 02-Jan-2017    | I.  Duff      | 2.2W     | Added function dlclear().
+* 20-Jan-2018    | I.  Duff      | 2.2W     | Removed most TRACE statements.
+*****************************************************************************/
+// ---------- Module include files --------------------------------------------
+#include "stdafx.h"
+#include "LinkedList.h"
+
+// ---------- Static class member initialisation ------------------------------
+CLinkedList *CLinkedList::dllp = ( CLinkedList * )0;// Static working list ptr
+
+//////////////////////////////////////////////////////////////////////
+// Construction/Destruction
+//////////////////////////////////////////////////////////////////////
+/******************************************************************************
+*  Function Name: CLinkedList::CLinkedList()
+*
+*  Purpose:    Constructor for the LinkedList class
+*                 
+*  Parameters:    
+*		1.	The size of the data.
+*		2.	The address of the user comparison function.
+*		3.  The address of a user supplied data freeing function.
+*
+*  Side Effects:	
+*		1.	The base class CDLList is initialised with the constructors' 
+*			parameters.
+*		2.	The class default add function pointer set set to it's default.
+*
+*  Return Values: None.
+*
+*  NOTES:
+*		1. The provision with a data comparison function is MANDATORY at
+*          list creation time.
+*
+*
+*	20/10/2018:
+*	Changed the value of the incoming data size to unsigned long.  
+*	This way, data structures of great size may be implemented.
+*
+******************************************************************************/
+CLinkedList::CLinkedList(unsigned long Size, int(__cdecl *pCompData)(const void *, const void *), void(__cdecl *pFreeData)(void *))
+	: CDLList(Size, pCompData, pFreeData)
+{
+	if ( m_eErrorFlag > NoErrors ) {	// Base class instantiation failure
+		TRACE("\tBase class Instantiation failure. Error = (%d)\n", m_eErrorFlag );
+		return;
+	}
+    m_pAddFunction = &CLinkedList::dladd;		// Default add method on creation
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::~CLinkedList()
+*
+*  Purpose:		Destructor for the LinkedList class.
+*                 
+*  Parameters:	None.
+*
+*  Side Effects: All memory previously allocated in the list is released back 
+*  to the system.
+*
+*  Return Values: None.
+*                 
+******************************************************************************/
+CLinkedList::~CLinkedList()
+{
+	CDLitem	*Item;
+	dltofirst( );								// Set Scanner to first node
+	while (m_pScanner != m_pAnchor) {
+		Item = m_pScanner;
+		if ( m_pFreedata ) {					// Use the data freeing routine
+            ( m_pFreedata )( Item->Data );
+        }
+        m_pScanner = m_pScanner->Next;
+        delete[] Item->Data;
+        delete Item;
+	}
+	Item = m_pAnchor;
+	m_pFreedata=(void(*)(void *))NULL;
+	m_pCompdata=(int(*)(const void *, const void *))NULL;
+	delete Item;
+}
+
+/******************************************************************************
+*  Function Name: CDLitem::CDLitem()
+*
+*  Purpose:		Constructor for the CDLitem class
+*                 
+*  Parameters:	None.    
+*
+*  Side Effects:	
+*		1.	Each pointer in this class is set to NULL
+*
+*  Return Values: None.
+*                 
+******************************************************************************/
+CDLitem::CDLitem()
+{
+	Prev = ( CDLitem *)0;
+	Next = ( CDLitem *)0;
+	Data = ( void* )0;
+}
+
+/******************************************************************************
+*  Function Name: CDLitem::~CDLitem()
+*
+*  Purpose:		Destructor for the CDLitem class simply added to partially
+*				comply with the orthodoc canonical form of class.  In other 
+*				words,you can't depend on a compiler to create a destructor.
+*                 
+*  Parameters:	None.    
+*
+*  Side Effects:None.	
+*
+*  Return Values: None.
+*                 
+******************************************************************************/
+CDLitem::~CDLitem()
+{
+	;
+}
+
+/******************************************************************************
+*  Function Name: CDLList::CDLList()
+*
+*  Purpose:		Constructor for the CDLList class.
+*                 
+*  Parameters:    
+*		1.      The size of the data.
+*		2.      The address of the user comparison function.
+*		3.      The address of a user supplied data freeing function.
+*
+*  Side Effects:	
+*		1.	All data members in this base class are initialised.  The 
+*		CLinkedList class is derived from this one.
+*
+*  Return Values: None.
+*          
+*  NOTES:
+*
+*	20/12/2017:
+*	Changed the incoming data size to size_t.  This is the size of an
+*	unsigned long, independant of the target platform.
+******************************************************************************/
+CDLList::CDLList(size_t Size, int(__cdecl *pCompData)(const void *, const void *), void(__cdecl *pFreeData)(void *))
+{
+	m_eErrorFlag = NoErrors;
+
+	if ( Size <= 0 ) {
+		m_eErrorFlag = InvalidDataSize;
+		return;
+	}
+
+	m_pAnchor = new CDLitem;
+	if ( !m_pAnchor ) {
+		m_eErrorFlag = NoMoreMemory;
+		return;
+	}
+	m_pScanner = m_pAnchor;
+	m_pAnchor->Data = (void* )0;	// NULL has so many definitions!
+	m_pAnchor->Prev = m_pAnchor;
+	m_pAnchor->Next = m_pAnchor;
+    m_pMark = (CDLitem*)0;
+
+	if ( pFreeData )	m_pFreedata = pFreeData;
+	else				m_pFreedata=NULL;
+	if ( pCompData )	m_pCompdata=pCompData;
+	else				m_pCompdata=NULL;
+    m_DataSize = Size;
+    m_Count = 0;
+    m_Position = 0;
+    m_Sorted = false;
+}
+
+/******************************************************************************
+*  Function Name: CDLList::~CDLList()
+*
+*  Purpose:		Destructor for the CDLList class
+*                 
+*  Parameters:	None.    
+*
+*  Side Effects:None.	
+*
+*  Return Values: None.
+*                 
+******************************************************************************/
+CDLList::~CDLList()
+{
+	;
+}
+
+/******************************************************************************
+*  Function Name: CDLList::GetStatus()
+*
+*  Purpose:		Returns the value of the enumerated error flag after 
+*				initialisation. 
+*                 
+*  Parameters:		None.
+*
+*  Side Effects:	None.
+*
+*  Return Values:	A number greater than zero indicates failure, otherwise a 
+*					value of zero indicates success.
+*                 
+******************************************************************************/
+int CDLList::GetStatus()
+{
+	return( m_eErrorFlag );
+}
+
+/******************************************************************************
+ *  Function Name: CLinkedList::dltofirst()
+ *
+ *  Purpose:    This function returns a void pointer to the data contained in 
+ *              the first node of the linked list. (This is actually the node 
+ *              following the Anchor node.)
+ *
+ *  Parameters:		None.
+ *                      
+ *  Side Effects:   The List's position counter is set to either 1 or 0.
+ *
+ *  Return Values: 
+ *              1.      A void pointer that will be set to NULL on error.
+ *
+ *  Notes:      It is the calling function's responsibility to test the
+ *              return value.
+ *                 
+ ******************************************************************************/
+void* CLinkedList::dltofirst()
+{
+	m_eErrorFlag = NoErrors;
+
+	m_pScanner = m_pAnchor->Next;
+	if ( m_Count )
+		m_Position = 1;
+	else {
+		m_Position = 0;
+		return( (void*)0 );
+	}
+	return( m_pScanner->Data );	
+
+}
+
+/******************************************************************************
+ *  Function Name: CLinkedList::dltolast()
+ *
+ *  Purpose:    This function returns a void pointer to the data contained in 
+ *              the last node of the linked list. (This is actually the node 
+ *              prior to the Anchor node.)
+ *
+ *  Parameters:		None.
+ *                      
+ *  Side Effects:   The List's position counter is set to either 1 or 0.
+ *
+ *  Return Values: 
+ *              1.      A void pointer that will be set to NULL on error.
+ *
+ *  Notes:      It is the calling function's responsibility to test the
+ *              return value.
+ *                 
+ ******************************************************************************/
+void* CLinkedList::dltolast()
+{
+	m_eErrorFlag = NoErrors;
+	
+	m_pScanner = m_pAnchor->Prev;
+	m_Position = m_Count;
+	if ( m_Count )
+		 return( m_pScanner->Data );
+	else return( ( void*)0 );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlinsert()
+*
+*  Purpose:    This function allocates memory for a new CDLitem class and 
+*              the Data pointer of this new structure points to a newly 
+*              allocated space of "DataSize" bytes. The incoming "data" is 
+*              copied into the new CDLitem->Data space. The new node is then 
+*              inserted into the linked list in the position following the 
+*              CDLList's Scanner pointer.
+*
+*  Parameters:    
+*              1.      Data - A pointer to the data to be inserted into the
+*                      linked list.
+*              
+*  Side Effects:       Memory is allocated for the new CDLitem.
+*                      Memory is allocated to contain the Data.
+*                      Data is copied into the newly created Data "space"
+*                      The data is inserted into the list at the current node.
+*                      The List's node counter is incremented.
+*                      The List's position in the list is incremented.
+*                      The List's Scanner pointer is set to the node inserted.
+*
+*  Return Values: 
+*              1.      Success
+*              2.      Fail on error detection.
+*                 
+******************************************************************************/
+int CLinkedList::dlinsert(void* data)
+{
+	CDLitem		*Item = ( CDLitem *)0;
+	
+	m_eErrorFlag = NoErrors;
+
+	Item = new CDLitem;
+	if ( !Item ) {
+		m_eErrorFlag = NoMoreMemory;
+		return( Fail );
+	}
+	Item->Next = m_pScanner->Next;
+	Item->Prev = m_pScanner->Next->Prev;
+	if ( m_DataSize ) {
+		// The following may be debated by purists but I use new char[]
+		// instead of malloc or calloc.  Replace if you like but remember
+		// to "free()" where necessary.
+		Item->Data = new char[ m_DataSize ];
+		if ( !Item->Data ) {
+			m_eErrorFlag = NoMoreMemory;
+			return( Fail );
+		}
+		memcpy( Item->Data, data, m_DataSize );
+	}
+	m_pScanner->Next->Prev = Item;
+    m_pScanner->Next       = Item;
+    m_Count++;
+    m_Position++;
+    m_pScanner = Item;
+	m_Sorted = false;
+
+	if (m_pAddFunction == &CLinkedList::dladdins)
+			m_Sorted = true;
+	else	m_Sorted = false;
+
+	return( Success );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dladd()
+*
+*  Purpose:    This function adds a new node to the end of the linked list.
+*
+*  Parameters:    
+*              1.      data - A pointer to the data to be inserted into the
+*                      linked list.
+*              
+*  Side Effects:       
+*                      The side effects of this function are exactly the same
+*                      as function dlinsert() above.
+*
+*  Return Values: 
+*              1.      Success
+*              2.      Fail on error detection.
+*                 
+******************************************************************************/
+int CLinkedList::dladd(void* data)
+{
+	m_eErrorFlag = NoErrors;
+
+	m_pAddFunction = &CLinkedList::dladd;
+    dltolast( );
+    return ( dlinsert( data ) );
+}
+
+/******************************************************************************
+*  Function Name:      CLinkedList::dladdins()
+*
+*  Purpose:            Performs an insertion sort into the list.
+*
+*  Parameters:         void *Data      The user's data to add to the list.
+*
+*  Side Effects:       The node is added to the list in the order specified
+*                      by the user's comparison routine.
+*
+*  Return Values:      
+*              1.      Success
+*              2.      Fail on error detection.
+*
+*  Notes:
+*      1.      Use this method of adding to the list if you find that you
+*              don't want to use the sorting routines available. It takes
+*              a little longer to add to the list than dladd().
+*
+*      2.      A user supplied comparison routine is mandatory. This
+*              function will not work without one.
+*
+*****************************************************************************/
+int CLinkedList::dladdins(void* data)
+{
+	CDLitem         *p1 = (CDLitem *)0;
+    CDLitem			*p2 = (CDLitem *)0;
+    void*			d1 = (void*)0;
+    void*			d2 = (void*)0;
+    int             compCode1;
+    int             compCode2;
+    static void*	lp;
+
+	m_eErrorFlag = NoErrors;
+	m_pAddFunction = &CLinkedList::dladdins;
+
+	lp = dltofirst( );
+    while ( lp ) {
+		p1 = m_pScanner;
+        p2 = m_pScanner->Next;
+        d1 = ( void* )p1->Data;
+        d2 = ( void* )p2->Data;
+        if ( p2 == m_pAnchor) {		// End of the list
+			compCode1 = ((m_pCompdata)( ( void* )data, ( void* )d1) );
+            if ( compCode1 <= 0 ) {
+				dlgofwd( );
+                return dlinsert( data );
+            }
+            break;
+        }
+        compCode1 = ((m_pCompdata)( data, d1));
+        compCode2 = ((m_pCompdata)( data, d2));
+        if (( compCode1 >= 0 ) && ( compCode2 <= 0 )) {
+			return dlinsert( data );
+		}
+        lp = dlgofwd( );
+	}
+    dltolast( );
+    return ( dlinsert( data ) );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlgofwd()
+*
+*  Purpose:    This function traverses the linked list forwards and increments
+*              the Scanner pointer of the CDLList class and returns a pointer 
+*              to the data contained in the Scanner->CDLitem->Data.
+*
+*  Parameters: None.
+*
+*                      
+*  Side Effects:       
+*               While traversing the list, the position counter is incremented.
+*
+*  Return Values: 
+*              1.      A void pointer that will be set to NULL on error.
+*
+******************************************************************************/
+void* CLinkedList::dlgofwd()
+{
+	m_eErrorFlag = NoErrors;
+
+	m_pScanner = m_pScanner->Next;
+    m_Position++;
+    if ( m_pScanner == m_pAnchor ) {
+		m_Position = 0;
+        return ( (void* )0 );
+	}
+	return ( m_pScanner->Data );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlgoback()
+*
+*  Purpose:    This function traverses the linked list backwards and decrements
+*              the Scanner pointer of the CDLList class and returns a pointer 
+*              to the data contained in the Scanner->CDLitem->Data.
+*
+*  Parameters: None.
+*
+*                      
+*  Side Effects:       
+*               While traversing the list, the position counter is decremented.
+*
+*  Return Values: 
+*              1.      A void pointer that will be set to NULL on error.
+*
+******************************************************************************/
+void* CLinkedList::dlgoback()
+{
+	m_eErrorFlag = NoErrors;
+
+	m_pScanner = m_pScanner->Prev;
+    m_Position--;
+    if (m_pScanner == m_pAnchor) {
+		m_Position = 0;
+        return ( ( void* )0 );
+	}
+    return ( m_pScanner->Data);
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlsetcompare()
+*
+*  Purpose:    This function sets the Linked List's comparison function
+*              to point to another comparison function of the same type.
+*              ie: int (const void *, const void ).
+*
+*  Parameters:    
+*              1.      pCompData - A pointer to the address of a user defined
+*                      comparison function.
+*
+*  Side Effects:       The List's comparison pointer is now pointing to the
+*                      incoming function address.
+*                      
+*  Return Values: 
+*              1.      Success
+******************************************************************************/
+int CLinkedList::dlsetcompare(int (__cdecl *pCompData)(const void *,const void *))
+{
+	m_eErrorFlag = NoErrors;
+
+    m_pCompdata = pCompData;
+	return( Success );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlrewind()
+*
+*  Purpose:    This function rewinds the Scanner pointer of the CDLList to the 
+*              Sentinel Anchor pointer. (This is similar to a file rewind()).
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       
+*              The List's position counter is set in accordance with
+*              the node number.
+*
+*  Return Values: 
+*              1.      Success
+*
+******************************************************************************/
+int CLinkedList::dlrewind()
+{
+	m_eErrorFlag = NoErrors;
+
+	m_pScanner = m_pAnchor;
+    m_Position = 0;
+    return( Success );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlfind()
+*
+*  Purpose:    This function searches the linked list for the node containing 
+*              the incoming "Data".  The user defined Comparison function is 
+*              used to detect a matching node. If the comparison function 
+*              returns a value of 0, then a  pointer to the data in the node 
+*              is returned to the calling function, otherwise NULL is returned.
+*
+*  Parameters: 
+*              1.      Data - a pointer to the data to find.
+*                      
+*  Side Effects:       None.
+*
+*  Return Values: 
+*              1.      NULL - Node was not found.
+*              2.      NOT NULL - A pointer to the node found.
+*
+*  Notes:
+*      1.      There may be more than 1 identical node already existing in the
+*              list. This function returns a pointer to the first node 
+*              yielding a comparison result of 0.
+*
+*      2.      This function performs a sequential search of the list and
+*              may not really be efficient in some cases, especially where
+*              large lists exist and search times are important. In such
+*              cases, use dlbsearch() to perform binary searches.
+*
+******************************************************************************/
+void* CLinkedList::dlfind(void* data)
+{
+	m_eErrorFlag = NoErrors;
+    static void* lp;
+
+	if ( !m_pCompdata ) {
+		m_eErrorFlag = NoComparisonFunction;
+		return( ( void* )0 );
+	}
+	lp = dltofirst( );
+	while ( lp ) {
+		if (((m_pCompdata)( lp, data)) == 0) 
+			return ( (void*)lp );
+        lp = dlgofwd( );
+    }
+    return ( (void*)0 );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlbsearch()
+*
+*  Purpose:    This function performs a binary search of the linked list.
+*              If the node with the given "key" is found, then a pointer
+*              to said node is returned to the calling function, otherwise
+*              NULL is returned on an unsuccessful search.
+*
+*  Parameters: 
+*              1.      Data - a pointer to the data to find.
+*                      
+*  Side Effects:       None.
+*
+*  Return Values:
+*              1.      NULL - Node was not found.
+*              2.      NOT NULL - A pointer to the node found.
+*
+* Prerequisites:
+*              1.      A User supplied comparison function must be supplied.
+*              2.      The list must not be empty.
+*              3.      The list must have been previously sorted with either
+*                      dlsort() or dlqsort().
+*
+******************************************************************************/
+void* CLinkedList::dlbsearch(void* data)
+{
+	static  void* lp;
+    long    low = 0;
+    long	mid = dlcount( ) / 2;
+    long	high = dlcount( );
+    int     compCode = Fail;
+
+	m_eErrorFlag = NoErrors;
+
+	if ( !m_pCompdata ) {
+		m_eErrorFlag = NoComparisonFunction;
+		return( ( void* )0 );
+	}
+
+    if ((dlcount( )) <= 0 ) {
+		m_eErrorFlag = EmptyListReceived;
+		return( ( void* )0 );
+	}
+	if ( !m_Sorted ) {
+		m_eErrorFlag = ListHasNotBeenSorted;
+		return( ( void* )0 );
+	}
+	/* Point to first node in the list. */
+    while( low <= high ) {
+		lp = dltofirst( );
+        mid = ( low + high ) / 2;
+        /* Just traverse the list from the current position */
+        while ((dlposn( )) <= mid) {
+			lp = dlgofwd( );
+            if ( !lp )      break;
+        }
+        if ( !lp )      break;
+        /* It's only necessary to perform the comparison once */
+        compCode =  ((m_pCompdata)( lp, data ));
+        if ( compCode > 0 )
+			high = mid - 1;
+        else if ( compCode < 0 )
+			low = mid + 1;
+        else	return( lp );
+	}
+    return( (void*)0 );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlcount()
+*
+*  Purpose:    This function returns a count of the number of nodes currently 
+*              in the list.
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       None.
+*
+*  Return Values: 
+*              1.      A number greater or equal to zero, corresponding to the
+*                      number of nodes in the list.
+*
+******************************************************************************/
+long CLinkedList::dlcount()
+{
+	m_eErrorFlag = NoErrors;
+	return ( m_Count );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlposn()
+*
+*  Purpose:    Returns the position number of the current node in the list.
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       None.
+*
+*  Return Values: 
+*              A number greater than or equal to zero.
+*              
+******************************************************************************/
+long CLinkedList::dlposn()
+{
+	m_eErrorFlag = NoErrors;
+	return ( m_Position );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dldelete()
+*
+*  Purpose:    This function deletes a node from the linked list currently 
+*              pointed to by the CDLList->Scanner pointer. If the user has 
+*              defined a data freeing function, then this is called prior to 
+*              deleting the node from the list. The Scanner pointer is set 
+*              pointing to the next node in the list following the one 
+*              that has just been deleted.
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       The memory previously allocated for the current "data" 
+*                      node is released back to the system.
+*
+*  Return Values: 
+*              1.      Success
+*              2.      Fail (on error detection).
+*
+******************************************************************************/
+int CLinkedList::dldelete()
+{
+	CDLitem *Item = ( CDLitem *)0;
+	m_eErrorFlag = NoErrors;
+
+	if ( m_pScanner == m_pAnchor ) {
+		m_eErrorFlag = CantDeleteSentinel;
+		return( Fail );
+	}
+	if ( m_pScanner == m_pMark )  
+		m_pMark = (CDLitem *)0;
+	m_Count--;
+
+	if (m_pAddFunction == &CLinkedList::dladdins)
+		m_Sorted = true;
+	else    m_Sorted = false;
+    Item = m_pScanner;
+    m_pScanner->Prev->Next = m_pScanner->Next;
+    m_pScanner->Next->Prev = m_pScanner->Prev;
+    m_pScanner = m_pScanner->Next;
+    if ( m_pFreedata ) {
+		/* Use the data freeing routine */
+        (m_pFreedata)( Item->Data );
+    }
+
+    delete[] Item->Data;
+    delete Item;
+
+    if ( m_pScanner == m_pAnchor ) {
+		dltolast( );
+        return( Success );
+    }
+    return ( dlrestore( ) );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlrestore()
+*
+*  Purpose:    Used privately, this function restores the position numbers
+*              of the list. This is done at a low level particularly after
+*              adding, deleting a node, etc.
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       The nodes position numbers are restored.
+*
+*  Return Values: 
+*              1.      Success
+*
+******************************************************************************/
+int CLinkedList::dlrestore()
+{
+	CDLitem *ip = (CDLitem *)0;
+	
+	m_eErrorFlag = NoErrors;
+	ip = m_pScanner;
+	dltofirst( );
+	while (m_pScanner != ip)
+		dlgofwd( );
+	return( Success );  
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlget()
+*
+*  Purpose:    This function returns a fresh copy of the data currently being 
+*              pointed to by the CDLList->Scanner pointer.
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       None.
+*
+*  Return Values: 
+*              1.      A void pointer that will be set to NULL on error.
+*
+******************************************************************************/
+void* CLinkedList::dlget()
+{
+	m_eErrorFlag = NoErrors;
+
+	if ( m_Count <= 0 )
+			return ( (void*)0 );
+    else	return ( m_pScanner->Data );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlreplace()
+*
+*  Purpose:    This function replaces the existing CDLList->Scanner->Data with 
+*              the new incoming Data. It really utilises some of the lower
+*              level routines, by deleting the current Data pointed to by the 
+*              Scanner pointer, and inserting the new data in it's place.
+*
+*  Parameters: 
+*              1.      Data - The pointer containing the new data to 
+*                      replace the old data with.
+*                      
+*  Side Effects:       The old data is replaced with the new data.
+*
+*  Return Values: 
+*              1.      Success
+*              2.      Fail on error.
+*
+******************************************************************************/
+int CLinkedList::dlreplace(void* data)
+{
+	m_eErrorFlag = NoErrors;
+
+	if ( dlcount( ) <= 0 ) {
+		m_eErrorFlag = EmptyListReceived;
+		return( Fail );
+	}
+	if ( m_pScanner == m_pAnchor ) {
+		m_eErrorFlag = CantDeleteSentinel;
+		return( Fail );
+	}
+	dldelete( );
+
+	if (m_pAddFunction == &CLinkedList::dladdins)
+		return dladdins( data );
+	if ( m_pScanner->Next != m_pAnchor)
+		dlgoback( );
+	return( dlinsert( data) );
+}
+/******************************************************************************
+*  Function Name: _Compare()
+*
+*  Purpose:    This comparison routine is used exclusively by the function 
+*              dlqsort. It is declared as a friend to the class.
+*
+*  Parameters: 
+*              1.      p1 - pointer to a node's data in the list.
+*              2.      p2 - pointer to a node's data in the list.
+*                      
+*  Side Effects:       None.
+*
+*  Return Values: 
+*              1. A value < 0.
+*              2. A value == 0.
+*              3. A vlue > 0.
+*
+******************************************************************************/
+static int _Compare(const void *p1, const void *p2)
+{
+	CDLitem	*Item1 = (CDLitem *)p1;
+    CDLitem	*Item2 = (CDLitem *)p2;
+	return ( CLinkedList::dllp)->m_pCompdata(Item1->Data,Item2->Data );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlqsort()
+*
+*  Purpose:    Sorts the linked list using the library function qsort()
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       The linked list is sorted.
+*
+*  Return Values: 
+*              1. Success
+*              2. Fail on error.
+*
+*  Notes:      If speed is of the essence when sorting, then you should
+*              probably use this function which uses the standard run time 
+*              library function "qsort()". Because the linked lists may be 
+*              scattered through memory, this  function creates an array of 
+*              CDLitem pointers equal to the number of nodes in the list. Each 
+*              of the elements of the new array is initially pointing 
+*              to a node in the list. This array is then fed to qsort. After 
+*              sorting, each of the nodes in the list points to the Data 
+*              currently pointed at by each node in the array. Memory used in 
+*              creating the array is released back to the system.
+*
+******************************************************************************/
+int CLinkedList::dlqsort()
+{
+	CDLitem *Sort = (CDLitem *)0;
+	unsigned int Count = 0;
+    int i = 0;
+
+	m_eErrorFlag = NoErrors;
+	if ( !m_pCompdata ) {
+		m_eErrorFlag = NoComparisonFunction;
+		return( Fail );
+	}
+	if (( Count = dlcount( )) <= 1) {
+		m_Sorted = true;
+        return( Success );
+    }
+	dllp = this;
+
+	Sort = new CDLitem[ Count ];
+	if ( !Sort ) {
+		m_eErrorFlag = NoMoreMemory;
+		return( Fail );
+	}
+    dlrewind( );
+	while (dlgofwd( )) 
+		Sort[i++].Data = m_pScanner->Data;
+	qsort( (void*)Sort,(size_t)Count, sizeof( CDLitem ), _Compare);
+    dlrewind( );
+    i = 0;
+    while (dlgofwd( )) 
+		m_pScanner->Data = Sort[i++].Data;
+    dltofirst( );
+    delete[] Sort;
+
+    dllp = ( CLinkedList *)0;
+    m_Sorted = true;
+
+    return( Success );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlsort()
+*
+*  Purpose:    Sorts the linked list using a swap sort algorithm.
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       The linked list is sorted.
+*
+*  Return Values: 
+*              1. Success
+*              2. Fail on error.
+*
+*  Notes:      
+*      1.      This function uses a primitive swap sorting technique. The 
+*              CDLList->CDLitem->Data pointers are swapped if the comparison is
+*              greater than 0. (The user defined comparison function is used.)
+*
+*      2.      This sort is generally good for around 100 nodes or less. If
+*              greater than 100 nodes, or speed is the essence of sorting,
+*              then use dlqsort().
+*
+******************************************************************************/
+int CLinkedList::dlsort()
+{
+	void* d1;
+	void* d2;
+	CDLitem *p1, *p2;
+    bool Sorting = true;
+
+	m_eErrorFlag = NoErrors;
+
+	if ( !m_pCompdata ) {
+		m_eErrorFlag = NoComparisonFunction;
+		return( Fail );
+	}
+	if ((dlcount( )) <= 1L ) {
+		m_Sorted = true;
+        return ( Success );
+	}
+	while ( Sorting ) {
+		Sorting = false;
+        dltofirst( );
+		while ( m_pScanner != m_pAnchor ) {
+			p1 = m_pScanner;
+            p2 = m_pScanner->Next;
+            if ( p2 == m_pAnchor )	break;
+            d1 = p1->Data;
+            d2 = p2->Data;
+            if (((m_pCompdata)( (void*)d1,(void*)d2 )) > 0 ) {
+				Sorting = true;
+                p1->Data = d2;
+                p2->Data = d1;
+            }
+            dlgofwd( );
+        }
+    }
+    dltofirst( );
+    m_Sorted = true;
+    return( Success );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlmark()
+*
+*  Purpose:    Tags a particular node in the list for possible future
+*              processing.
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       None.
+*
+*  Return Values: 
+*              1.      Success
+*              2.      Fail on error.
+*
+*  Notes:      Only one node at a time may be tagged.
+*              
+******************************************************************************/
+int CLinkedList::dlmark()
+{
+	m_eErrorFlag = NoErrors;
+
+	if ( m_pScanner == m_pAnchor ) {
+		m_eErrorFlag = CantMarkSentinel;
+		return( Fail );
+	}
+	m_pMark = m_pScanner;
+    return( Success );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlunmark()
+*
+*  Purpose:    Untags a previously marked node in the list.
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       None.
+*
+*  Return Values: 
+*              1.      Success.
+*              2.      Fail on error.
+*
+*  Notes:      The node should have been previously tagged using dlmark().
+*              
+******************************************************************************/
+int CLinkedList::dlunmark()
+{
+	m_eErrorFlag = NoErrors;
+
+	if ((dltomark( )) == 0) {
+		m_pMark = ( CDLitem *)0;
+        return( Success );
+    }
+    return( Fail );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dltomark()
+*
+*  Purpose:    To go to a previously tagged node in the list.
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       None.
+*
+*  Return Values: 
+*              1.      Success.
+*              2.      Fail on error.
+*
+*  Notes:      The node should have been previously tagged using dlmark().
+*              
+******************************************************************************/
+int CLinkedList::dltomark()
+{
+	m_eErrorFlag = NoErrors;
+
+	if ( !m_pMark ) {
+		m_eErrorFlag = NodeNotPreviouslyMarked;
+		return( Fail );
+	}
+	m_pScanner = m_pMark;
+    return ( dlrestore( ) );      /* Restore the position number  */
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlatmark()
+*
+*  Purpose:    Tests to see if we are at a previously marked node in the list.
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       None.
+*
+*  Return Values: 
+*              1.      (1) true - we are at a marked node.
+*              2.      (0) false - we are not at a marked node.
+*
+******************************************************************************/
+int CLinkedList::dlatmark()
+{
+	m_eErrorFlag = NoErrors;
+
+	if ( !m_pMark ) {
+		m_eErrorFlag = NodeNotPreviouslyMarked;
+		return( Fail );
+	}
+	return ( m_pScanner == m_pMark );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dlsorted()
+*
+*  Purpose:    Returns the value of the sorted flag.
+*
+*  Parameters: None.
+*                      
+*  Side Effects:       None.
+*
+*  Return Values: 
+*              1.      (1) true - The list has been sorted.
+*              2.      (0) false - The list has not been sorted.
+*
+******************************************************************************/
+bool CLinkedList::dlsorted()
+{
+	return( m_Sorted );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::DumpMemory()
+*
+*  Purpose:    A limited means of dumping a portion of memory to cout.
+*                 
+*  Parameters:    
+*      1.      The starting address of the memory area.
+*      2.      The size of the memory area to dump.
+*      3.      A Meaningful comment.
+*
+*  Side Effects:  None.
+*
+*  Return Values: None.
+*                 
+*  Notes:      ALL output is to cout.
+*
+******************************************************************************/
+int CLinkedList::DumpMemory(void* pAddress, unsigned long length, char *pComment )
+{
+	unsigned char   *ptr = (unsigned char *) pAddress;
+    unsigned long   curPos = 0L;
+    unsigned long   counter = 0;
+
+	if ( pAddress == NULL ) {
+		// NULL Address received
+		return( CLinkedList::NullAddress );
+	}
+	if ( length <= 0L ) {
+		// Invalid data length.
+		return( CLinkedList::InvalidDataLength );
+	}
+	if ( pComment == ( char *)0 ) 
+		pComment = "Memory";
+	
+    TRACE("Dump <%s> begins - length = %ld", pComment, length);
+	while( curPos < length ) {
+		int     savePos = curPos;
+		if ( curPos == 0 )
+			TRACE("\n");
+		TRACE("%03d:%03X:", curPos, curPos);
+        for ( counter = 0; counter < 16; counter++, curPos++) { // Yes, specifically 16!
+			if ( counter % 4 == 0 )
+				TRACE(" ");
+            if ( curPos >= length ) {
+				TRACE( "  " );
+				continue;
+            }
+            TRACE("%02x", ( unsigned char ) *( ptr + curPos ));
+        }
+		TRACE(" >" );
+		curPos = savePos;
+        for ( counter = 0; counter < 16; counter++, curPos++) {
+			if ( curPos >= length ) {
+				TRACE(" ");
+                continue;
+            }
+            if ( isprint( ( unsigned char) *( ptr + curPos )))
+					TRACE("%c", (unsigned char) *( ptr + curPos ));
+            else    TRACE(".");
+        }
+        TRACE( "<\n" );
+    }
+    TRACE("Dump <%s> Ends\n", pComment);
+	return( Success );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dldumpnode()
+*
+*  Purpose:    Dumps the DATA area of a node in the list to the TRACE macro.
+*                 
+*  Parameters: None.
+*
+*  Side Effects:  Simple output to the screen.
+*
+*  Return Values: Success.
+*                 
+******************************************************************************/
+
+int CLinkedList::dldumpnode()
+{
+	m_eErrorFlag = NoErrors;
+
+	char comment[ 8192 ];	// Temporary
+
+	if (( dlcount( )) <= 0L ) {
+		TRACE("dldumpnode: Empty List Received\n");
+		return( m_eErrorFlag = EmptyListReceived );
+	}
+	void* lp = dlget( );
+	if ( !lp ) {
+		TRACE("dldumpnode: No Currency\n");
+		return( m_eErrorFlag = NoCurrency );
+	}
+	
+	sprintf_s(comment,sizeof(comment), "Dumping List Contents: %ld", dlposn());
+	DumpMemory( lp, m_DataSize, comment );
+
+    return( Success );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::dldumplist()
+*
+*  Purpose:    Dumps the DATA areas of the entire list node in the list to the 
+*              TRACE macro.
+*                 
+*  Parameters: None.
+*
+*  Side Effects:  None.
+*
+*  Return Values: Success.
+*                 
+******************************************************************************/
+int CLinkedList::dldumplist()
+{
+	m_eErrorFlag = NoErrors;
+
+	if (( dlcount( )) <= 0L ) {
+		TRACE("dldumplist: Empty list received\n");
+		return( m_eErrorFlag = EmptyListReceived );
+	}
+	TRACE("Dumping list contents:\n");
+	void* lp = dltofirst( );
+	while ( lp ) {
+		dldumpnode( );
+		lp = dlgofwd( );
+	}
+    return( Success );
+}
+/******************************************************************************
+*  Function Name: CLinkedList::dlclear()
+*
+*  Purpose:    Deletes all nodes in the list, leaving it empty.
+*
+*  Parameters: None.
+*
+*  Side Effects:  
+*		1. All nodes in the list are deleted.
+*		2. If the user has supplied a data freeing function it will be invoked.
+*
+*  Return Values: Success.
+*
+******************************************************************************/
+int CLinkedList::dlclear( void )
+{
+	m_eErrorFlag = NoErrors;
+
+	void *p = dltofirst();
+	while (p) {
+		dldelete();
+		p = (void *)dlget();
+	}
+
+	return (m_eErrorFlag);
+}
+/******************************************************************************
+*  Function Name: CLinkedList::operator<<( void* )
+*
+*  Purpose:    This function adds a new node to the end of the linked list.
+*
+*  Parameters:    
+*              1.      data - A pointer to the data to be inserted into the
+*                      linked list.
+*              
+*  Side Effects:       
+*                      The side effects of this function are exactly the same
+*                      as function dladd() above.
+*
+*  Return Values: 
+*              1.      Success
+*              2.      Fail on error detection.
+*                 
+******************************************************************************/
+int CLinkedList::operator <<(void* data)
+{
+	return dladd( data );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::operator[]( long )
+*
+*  Purpose:	Returns a pointer to the data contained in the node of the
+*			list specified by "nodeNumber".
+*                 
+*  Parameters:    
+*      1.      long nodeNumber - The node required in the list.
+*
+*  Side Effects:  None.
+*
+*  Return Values: A pointer to the data contained in the given node.
+*                 
+******************************************************************************/
+void* CLinkedList::operator [](long nodeNumber )
+{
+	void*	lp = ( void* )0;
+
+	m_eErrorFlag = NoErrors;
+    if ( nodeNumber < 0L || nodeNumber >= dlcount() ) {
+        return( ( void* )0 );
+    }
+	lp = dltofirst();
+	while ( lp ) {
+		if ( ( dlposn() - 1L ) == nodeNumber )
+			break;
+		lp = dlgofwd();
+	}
+	return( lp );
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::operator++( int )
+*
+*  Purpose:    Traverse forwards through a LinkedList
+*
+*  Parameters: None.   
+*              
+*  Side Effects:       
+*                      The side effects of this function are exactly the same
+*                      as function dlgofwd() above.
+*
+*  Return Values: 
+*              1.      Success
+*              2.      Fail on error detection.
+*                 
+******************************************************************************/
+void* CLinkedList::operator++( int )
+{ 
+	return dlgofwd();	                 
+}
+
+/******************************************************************************
+*  Function Name: CLinkedList::operator--( int )
+*
+*  Purpose:    Traverse backwards through a LinkedList
+*
+*  Parameters: None.   
+*              
+*  Side Effects:       
+*                      The side effects of this function are exactly the same
+*                      as function dlgoback() above.
+*
+*  Return Values: 
+*              1.      Success
+*              2.      Fail on error detection.
+*                 
+******************************************************************************/
+void* CLinkedList::operator--( int )
+{ 
+    return dlgoback();	             
+}
+// ---------- End of file -----------------------------------------------------
