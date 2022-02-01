@@ -18,9 +18,11 @@ YOU WON'T BE ABLE TO SORT THE LIST OR USE MUCH OF THE LIST FUNCTIONALITY.
 OR:
 
 // 2. One with a comparison function
+
 CLinkedList myList( sizeof( Structure ), Compare );
 
 // 3. One with comparison and data freeing functions
+
 CLinkedList myList( sizeof( Structure ), Compare, FreeData ); // Think of FreeData as a destructor.
  
 **YOU CAN ALSO CREATE A LIST OF CLASSES (as opposed to Structures only).**
