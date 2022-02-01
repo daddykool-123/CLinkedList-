@@ -74,12 +74,7 @@ int TestListWithClasses( void )
             cout << "X value = (" << px->get() << ")" << endl;
             px = (X *)myList.dlgofwd();
         }
-        X *px = (X *)mylist.dltofirst();
         cout << "list contents ..." << endl;
-        while (px) {
-                cout << "X = (" << px->get() << ")" << endl;
-                px = (X *)mylist.dlgofwd();
-        }
         return myList.GetStatus();
 }
 
