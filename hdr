@@ -1,1 +1,195 @@
 
+// LinkedList.h: interface for the CLinkedList class.
+//
+//////////////////////////////////////////////////////////////////////
+/******************************************************************************
+*
+*   FILE SPECIFICATION : LinkedList.h
+*       TARGET MACHINE : Any machine.
+*          ENVIRONMENT : WINDOWS/NT
+*               SYSTEM : N/A
+*              PROJECT : N/A
+*
+*   COPYRIGHT
+*       Copyright (c) 1995-1999 Ian Duff - Duff Software and Services
+*		Copyright (c) 2017-2022 Ian Duff - DaddyKool Collectables.
+*       ALL RIGHTS RESERVED
+*
+*------------------------------------------------------------------------------
+*
+*    Author :     Ian Duff
+*    Created on : 18 January 1999
+*
+************* F U N C T I O N A L    D E S C R I P T I O N ********************
+*
+*   Usage  : #include "LinkedList.h"
+*   Purpose: Header file for the CLinkedList class.
+*
+************* SOFTWARE TERMS AND CONDITIONS **********************************
+*
+*	NOTICE:  All information contained herein is, and remains
+*	the intellectual property of Ian Duff, Adelaide, South Australia.
+*	Permission to use, copy, modify, distribute and sell this software
+*	and its documentation for any purpose is hereby granted without fee,
+*	provided that this header file appears in all copies and
+*	that both that copyright notice and this permission notice appear
+*	in supporting documentation.  Ian Duff makes no
+*	representations about the suitability of this software for any
+*	purpose.  It is provided "as is" without express or implied warranty.
+*	THIS SOFTWARE IS A TOOL FOR EDUCATIONAL PURPOSES ONLY.
+
+*
+************* M O D I F I C A T I O N   H I S T O R Y *************************
+*     Date       | Author        | Version  | Reason for change
+*----------------+---------------+----------+----------------------------------
+* 20-March-1999  | I.  Duff      | 2.0W     | Final Realease Windows Version.
+* 20-Nov-2017    | I.  Duff      | 2.1W     | Added include file for qsort().
+* 02-Jan-2017    | I.  Duff      | 2.2W     | Added function dlclear().
+*----------------+---------------+----------+---------------------------------
+***********************************************************************/
+#if !defined(	___CIDLINKEDLIST_H___ )
+#define		___CIDLINKEDLIST_H___ 
+
+#if _MSC_VER > 1000
+#pragma once
+#endif // _MSC_VER > 1000
+// ---------- Module include files --------------------------------------------
+#include <memory.h>					// Required for memcpy().
+#include <ctype.h>					// Required for debugging diagnostics.
+#include <stdlib.h>					// qsort declaration.
+#include <iostream>					// I/O streams.
+// ---------- Module constant definitions -------------------------------------
+static const int Success = 0;				// General Success return code
+static const int Fail = -1;				// General Failure return code
+
+/******************************************************************************
+*	Here is the class definition for a list Node class
+******************************************************************************/
+class CDLitem {
+public:
+	CDLitem();
+	virtual		~CDLitem();
+	class		CDLitem *Prev;				// Points to previous node
+	class		CDLitem *Next;				// Points to Next node
+	void*		Data;						// Points to node data
+};
+
+/******************************************************************************
+*	Here is the class definition for the List class handler/manager
+******************************************************************************/
+class CDLList {
+public:
+	int		GetStatus(void);
+	virtual ~CDLList();
+	CDLList(size_t Size, int(*pCompData)(const void *, const void*), void(*pFreeData)(void *));
+
+	void(*m_pFreedata)(void *);						// Data freeing function
+	int(*m_pCompdata)(const void *, const void *);	// List compare function
+	bool	m_SortOnInsert;							// Sort when adding to list?
+	bool	m_Sorted;								// Boolean sorted/unsorted list
+	long	m_Position;								// Currency position in list
+	long	m_Count;								// Number of nodes in list
+	size_t	m_DataSize;								// Size of data to save
+	CDLitem *m_pMark;								// Mark a node in the list
+	CDLitem *m_pScanner;							// List "Cursor"
+	CDLitem *m_pAnchor;								// List Sentinel
+
+	/*
+	* Most of these enumerated types are self explanatory.
+	* That is why I have not bothered to add a comment after them.
+	*/
+	enum ErrorFlag {						// Possible Errors
+		NoErrors = 0,
+		InvalidDataSize,					// Bad size
+		NoMoreMemory,						// Heap exhausted
+		NoComparisonFunction,				// Exactly that 
+		EmptyListReceived,					// -- ditto ----
+		ListHasNotBeenSorted,				//
+		CantDeleteSentinel,					//
+		CantMarkSentinel,					//
+		NodeNotPreviouslyMarked,			//
+		DebugNotDefined,					//
+		NullAddress,						//
+		InvalidDataLength,					//
+		NoCurrency,							//
+	};
+	ErrorFlag m_eErrorFlag;
+};
+
+/******************************************************************************
+*	Here is the class definition for the CLinkedList class for Windows OS.
+*	It has better functionality than the CList class, as it allows for fast
+*	insertion of nodes anywhere in the list.  A node is ALWAYS appended to the
+*	end (or tail) of the list.  Unlike the CList class, it is not necessary to
+*	perform sequential searches, as the nodes may be sorted in memory, hence
+*	binary searches may be made.
+*
+*	Technical Note 1.
+*	Apart from the obvious advantages of using linked lists, the user does not
+*	have to worry about specifically removing the list from memory.
+*	The virtual destructor is available, but when the CLinkedList object falls
+*	out of scope, all previously allocated memory is automatically released.
+*******************************************************************************/
+class CLinkedList : public CDLList
+{
+public:
+	bool	dlsorted(void);			// bool - Is the list is sorted or not
+	int	dlatmark(void);			// Test if at marked node
+	int	dltomark(void);			// Go to a previously marked node in list
+	int	dlunmark(void);			// Unmark a node in the list
+	int	dlmark(void);			// Mark a Node in list
+	int	dlsort(void);			// Sort using primitive swap sort
+	int	dlqsort(void);			// Sort using qsort() function
+	int	dlreplace(void* data);		// Replace this node with the data
+	void*	dlget(void);			// Get currency (the current data)
+	int	dldelete(void);			// Delete the current node
+	long	dlposn(void);			// Node's position in the list
+	long	dlcount(void);			// Number of nodes in list
+	void*	dlbsearch(void* data);		// Binary search of the linked list
+	void*	dlfind(void* data);		// Find the node with this data
+	int	dlrewind(void);			// Rewind to start of list
+	// Change the user supplied comparison function (if required) to another
+	int	dlsetcompare(int(*pCompData) (const void *, const void *));
+	void*	dlgoback(void);			// Travel backwards through list
+	void*	dlgofwd(void);			// Travel forwards through list
+	int	dladdins(void* data);		// Add as insertion sort
+	int	dladd(void* data);		// Add to the list
+	int	dlinsert(void* data);		// Insert a new node here
+	void*	dltolast(void);			// Go to the last node in list
+	void*	dltofirst(void);			// Go to the first node in list
+	int	dlclear(void);			// Empty the list of every node
+
+	// Some operator overloading, use if suited to taste.
+	int	operator<<(void*);		// Same as dladd()
+	void*	operator[](long);
+
+	// The int argument below enforces postfix increment		
+	void*	operator++(int);			// Equates to dlgofwd()	
+	void*	operator--(int);			// Equates to dlgoback()
+
+	// Debugging Diagnostic functions
+	static int	DumpMemory(void* pAddress = NULL, unsigned long length = 0L, char *pComment = NULL);
+	int		dldumplist(void);			// Dump the entire list
+	int		dldumpnode(void);			// Dump a single node
+
+	// The CLinkedList class constructors
+	CLinkedList(unsigned long Size = 0, int(*pCompData)(const void *, const void*) = NULL, void(*pFreeData)(void *) = NULL);
+
+	// The class destructor
+	virtual ~CLinkedList();
+	// Internal pointer to the internal add function (dladd or dladdins)
+	int (CLinkedList::*m_pAddFunction)(void*);
+	// The internal comparison function used exclusively by the qsort function
+
+	// Added to return the size of the data
+	inline size_t GetDataSize(void) { return(m_DataSize); }
+
+	// A temporary static internal CLinkedlist pointer
+	static	CLinkedList *dllp;
+
+private:
+	friend	static int _Compare(const void *p1, const void *p2);
+	int	dlrestore(void);					// Restore node position numbers
+};
+
+#endif // !defined(___CIDLINKEDLIST_H___ )
