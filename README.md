@@ -1,4 +1,4 @@
-# CLinkedList-
+# CLinkedList- C++ Doubly linked lists for MS Visual Studio
 C++ Doubly linked lists for MS Visual Studio
 
 **VERY IMPORTANT ADDITIONAL INFORMATION**:
