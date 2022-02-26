@@ -1,4 +1,4 @@
-Introduction
+# Introduction
 
 Before you begin:
 
@@ -20,8 +20,8 @@ The CLinkedList class does not. All memory for data-types is allocated on the he
 has a pointer to the user's data. However, you don't really need to know how the class works, 
 just call the relevant functions and test the return values.
 
-Examples
-Using the code
+## Examples
+### Using the code
 User defined structures
 
 ```
@@ -35,7 +35,7 @@ typedef struct {
 Structure;
 ```
 
-Comparison function examples
+## Comparison function examples
 Pass the name of your comparison function to the CLinkedList constructor:
 
 Example 1 - Comparing two string fields within a structure
@@ -99,7 +99,7 @@ Example 4 - Comparing two floating point numbers
 	    return (retCode);
 }
 
-Data Freeing function (pseudo destructor)
+## Data Freeing function (pseudo destructor)
 
 The data freeing function is invoked when the CLinkedList destructor is invoked, or when a node is deleted in the list.
 
@@ -116,7 +116,8 @@ The data freeing function is invoked when the CLinkedList destructor is invoked,
             delete[ ] s->myChar;
     }
     
-Constructor - List declaration
+# Constructor - List declaration
+
 Method 1 - bare bones list
 
 	CLinkedList myList( sizeof( Structure ));
@@ -129,7 +130,7 @@ Method 3 - With comparison and data freeing functions
 
     CLinkedList myList( sizeof( Structure ), Compare, FreeData );
     
-Example List creation code:
+# Example List creation code:
 Create a list large enough to hold our Structure using a comparison function and do stuff with it.
 ````
  int AddSomeStructuresToAList( void )
@@ -172,10 +173,10 @@ Create a list large enough to hold our Structure using a comparison function and
     return( retCode );
 }
 ````
-Basic principles
+## Basic principles
 The user must be familiar with C/C++ pointers and type-casting. Always test the return value from a list function.
 
-CLinkedList Member Functions:
+## CLinkedList Member Functions:
 All of the following member functions are used in the downloadable demo project.
 ````
             Constructor(...)                // The constructor for the class described above.
@@ -219,7 +220,7 @@ All of the following member functions are used in the downloadable demo project.
             void* operator--( int )        // Equates to dlgoback()
     
 ````    
-Conclusion and Points of Interest
+# Conclusion and Points of Interest
 
 This code was originally created in the early 90's in the "C" programming language. Since then and with the advent of C++ as well as the almost continuous changes in C++ compilers, this code has evolved accordingly. You may find it interesting to note that the sorting functions in the class don't touch the user's data at all but simply swaps list node data pointers. It's far quicker to change a pointer than it is to change data. Since C# allowed for functions to be included in a structure, it is now possible to also add classes to a CLinkedList using the Method 1 example above. Anytime you use Method 1, you can't use the CLinkedList sort, search or find functions. You would have to visit each node and test accordingly.
 If you find the class useful, please let me know. It is being used in the real world. If you would like to see any more features included also drop me a line for consideration. Personally, because I come from a previous "C" programming environment, I'm used to pointer arithmetic which is why you see many mandatory typecasted return types. If you inspect the source code, you'll see why. I did come across a gotcha when coding one of the comparison functions, I forgot to test for a comparison result of zero.
