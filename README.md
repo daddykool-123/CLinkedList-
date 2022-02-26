@@ -48,8 +48,10 @@ Example 1 - Comparing two string fields within a structure
     ********************************************************************/
     int Compare( const void *d1, const void *d2 )
     {
-        Structure *s1 = ( Structure *)d1;
-        Structure *s2 = ( Structure *)d2;
+        // Done properly, casting away the const here
+        Structure *s1 = (static_cast<Structure*>(const_cast<void*>(d1)));
+        Structure *s2 = (static_cast<Structure*>(const_cast<void*>(d2)));
+	
         return strcmp((char *)s1->Data, (char *)s2->Data);
     }
     
