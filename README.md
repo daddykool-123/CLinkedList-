@@ -4,7 +4,7 @@ Before you begin:
 
 The enclosed test code is not C11 compatible.  I have used strcpy, sprintf
 and used a lot of "C"isms that C++ purists do not like.  Also, because the CLinkedList
-uses the qsort library function, I have to return 3 values (-1, 0, +1) on comparison
+uses the qsort library function, I have to return 3 values (1, 0, +1) on comparison
 which is why the Comparison functions may look a little ugly.  We cannot use std::sort() 
 because that particular function requires iterators and a simpler comparison function.
 I have also omitted many static_cast<>(x) calls.
@@ -226,4 +226,5 @@ All of the following member functions are used in the downloadable demo project.
 
 This code was originally created in the early 90's in the "C" programming language. Since then and with the advent of C++ as well as the almost continuous changes in C++ compilers, this code has evolved accordingly. You may find it interesting to note that the sorting functions in the class don't touch the user's data at all but simply swaps list node data pointers. It's far quicker to change a pointer than it is to change data. Since this language allowed for functions to be included in a structure (idiocy in the author's opinion), it is now possible to also add classes to a CLinkedList using the Method 1 example above. Anytime you use Method 1, you can't use the CLinkedList sort, search or find functions. You would have to visit each node and test accordingly.  
 The code is guaranteed to work as intended with the classic struct paradigm and although I have extensively tested the list code, I cannot say the same for classes but lists of classes appear to work. 
+This code was also ported onto various flavours of UNIX but as at the time of writing this code, there wasn't an STL.  However, in 2002 I wrote a CLinkedList<T> container class with iterators to replace this code.  Microsoft has only relatively recently created such a container class (for linked lists).
 If you find the class useful, please let me know. It is being used in the real world. If you would like to see any more features included also drop me a line for consideration. Personally, because I come from a previous "C" programming environment, I'm used to pointer arithmetic which is why you see many mandatory typecasted return types. If you inspect the source code, you'll see why. I did come across a gotcha when coding one of the comparison functions, I forgot to test for a comparison result of zero.
