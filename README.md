@@ -4,7 +4,7 @@ Before you begin:
 
 The enclosed test code is not C11 compatible.  I have used strcpy, sprintf
 and used a lot of "C"isms that C++ purists do not like.  Also, because the CLinkedList
-uses the qsort library function, I have to return 3 values (1, 0, +1) on comparison
+uses the qsort library function, I have to return 3 values (-1, 0, +1) on comparison
 which is why the Comparison functions may look a little ugly.  We cannot use std::sort() 
 because that particular function requires iterators and a simpler comparison function.
 I have also omitted many static_cast<>(x) calls.
